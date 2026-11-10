@@ -1,8 +1,9 @@
 # latency-debugging-lab
 
-A small multi-tenant API, made slow in five common ways. For each one, the demo drives load before and after the fix and summarises what the traces show, so you can learn each cause's **signature**: the shape it leaves in a trace before you know what it is.
+Find the bottleneck, then scale it. Two halves:
 
-Companion to the post *"A user says a page is lagging: how do you debug it end to end?"*
+1. **Debugging** (`make demo`): a small multi-tenant API, made slow in five common ways. For each one, the demo drives load before and after the fix and summarises what the traces show, so you can learn each cause's **signature**: the shape it leaves in a trace before you know what it is. Companion to the post *"A user says a page is lagging: how do you debug it end to end?"*
+2. **Scaling** (`make scaling`): what each scaling technique buys, measured. More replicas vs a bigger instance, four places to cache, a connection pooler vs a bigger database, and per-client rate limits against a noisy client. Companion to the post *"How do you scale an API?"* Results: [scaling/results.md](scaling/results.md).
 
 ```bash
 make demo   # about a minute; prints results as Markdown
@@ -24,13 +25,28 @@ Without `make`: `docker compose up -d --wait postgres jaeger && docker compose r
 
 Measured results: [results.md](results.md).
 
+## Scaling experiments
+
+`scaling/run.sh` (or `make scaling`, about 15 minutes) starts `shopd`, a second small API, as one or more replicas behind nginx, and drives it with an open-model load generator, stepping the rate up until p99 passes 100 ms.
+
+| # | Question | Compared |
+|---|---|---|
+| 1 | More replicas, or a bigger instance? | 1, 2 and 3 replicas with 1 CPU each, vs 1 replica with 3 CPUs, on ~1 ms of CPU per request |
+| 2 | Where should a costly read be cached? | No cache vs an in-process map vs Redis vs an nginx micro-cache, all with a 1 s TTL |
+| 3 | "Too many connections": bigger database or pooler? | 4 and 6 app instances × pool of 20, against `max_connections = 100`, directly and through PgBouncer in transaction mode |
+| 4 | One client floods the API | No limit vs a per-client token bucket |
+
 ## Layout
 
 ```
 cmd/slowdemo/      seeds the data, runs every scenario, prints Markdown tables
 internal/lab/      the API (four routes), the five scenarios, the load driver, the trace summary, and the test
 internal/obs/      OpenTelemetry setup, a pgx tracer (query and connection-wait spans), Server-Timing
-compose.yaml       PostgreSQL 17, Jaeger 2, and a Go container
+cmd/shopd/         the API the scaling experiments run (CPU-bound route, cached aggregate, per-client rate limit)
+cmd/loadgen/       open-model load generator: steps the rate up and reports the highest one it sustained
+cmd/pooldemo/      many app pools against max_connections, directly and through PgBouncer
+scaling/           run.sh, nginx and PgBouncer configs, results.md
+compose.yaml       PostgreSQL 17, Jaeger 2, a Go container; profile "scaling" adds the app, nginx, Redis and PgBouncer
 ```
 
 ## Notes

@@ -33,6 +33,41 @@ services:
       postgres: { condition: service_healthy }
       jaeger: { condition: service_started }
 
+  # ---- scaling experiments (profile "scaling"; run scaling/run.sh) ----------
+  app:
+    build: .
+    profiles: ["scaling"]
+    cpus: ${APP_CPUS:-1}
+    environment:
+      GOMAXPROCS: ${APP_CPUS:-1}
+      DATABASE_URL: postgres://lab:lab@postgres:5432/lab?sslmode=disable&pool_max_conns=10
+      REDIS_URL: redis://redis:6379/0
+      CACHE: ${CACHE:-none}
+      RATE_LIMIT: ${RATE_LIMIT:-0}
+      CPU_ITER: ${CPU_ITER:-4000}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  nginx:
+    image: nginx:1.29.8-alpine
+    profiles: ["scaling"]
+    volumes: ["./scaling/nginx-${NGINX_MODE:-plain}.conf:/etc/nginx/nginx.conf:ro"]
+    depends_on: [app]
+
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["scaling"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.26.1-p0
+    profiles: ["scaling"]
+    volumes:
+      - ./scaling/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./scaling/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+
 volumes:
   gocache:
   gomod:
