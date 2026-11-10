@@ -36,6 +36,10 @@ Measured results: [results.md](results.md).
 | 3 | "Too many connections": bigger database or pooler? | 4 and 6 app instances × pool of 20, against `max_connections = 100`, directly and through PgBouncer in transaction mode |
 | 4 | One client floods the API | No limit vs a per-client token bucket |
 
+## Fan-out and the tail
+
+`go run ./cmd/fanout` (no Docker needed) simulates one request that waits for 1 to 1,000 servers, each usually fast but slow 1% of the time, and compares waiting for all of them with hedged requests and partial results. It's a simulation with the latency model stated in [`internal/fanout`](internal/fanout/fanout.go), not a measurement; its test checks the simulated tail against 1 − 0.99^N. Companion to the post *"What happens when you type a search into Google and press Enter?"*
+
 ## Layout
 
 ```
@@ -45,6 +49,7 @@ internal/obs/      OpenTelemetry setup, a pgx tracer (query and connection-wait 
 cmd/shopd/         the API the scaling experiments run (CPU-bound route, cached aggregate, per-client rate limit)
 cmd/loadgen/       open-model load generator: steps the rate up and reports the highest one it sustained
 cmd/pooldemo/      many app pools against max_connections, directly and through PgBouncer
+cmd/fanout/, internal/fanout/  the fan-out tail-latency simulation and its test
 scaling/           run.sh, nginx and PgBouncer configs, results.md
 compose.yaml       PostgreSQL 17, Jaeger 2, a Go container; profile "scaling" adds the app, nginx, Redis and PgBouncer
 ```
