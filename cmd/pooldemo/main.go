@@ -29,6 +29,19 @@ func main() {
 	per := flag.Int("pool", 20, "pool size per instance")
 	d := flag.Duration("duration", 8*time.Second, "load per run")
 	flag.Parse()
+	if *direct == "" || *bouncer == "" {
+		fmt.Fprintln(os.Stderr, "pooldemo: -direct and -bouncer are both required (scaling/run.sh sets them)")
+		os.Exit(2)
+	}
+	var counts []int
+	for _, s := range strings.Split(*instances, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil || n < 1 {
+			fmt.Fprintf(os.Stderr, "pooldemo: -instances: %q is not a positive integer\n", s)
+			os.Exit(2)
+		}
+		counts = append(counts, n)
+	}
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, *direct)
 	if err != nil {
@@ -37,13 +50,15 @@ func main() {
 	}
 	defer admin.Close()
 	var maxConns string
-	_ = admin.QueryRow(ctx, `SHOW max_connections`).Scan(&maxConns)
+	if err := admin.QueryRow(ctx, `SHOW max_connections`).Scan(&maxConns); err != nil {
+		fmt.Fprintln(os.Stderr, "pooldemo: cannot reach PostgreSQL:", err)
+		os.Exit(1)
+	}
 	fmt.Printf("PostgreSQL max_connections = %s; each instance has a pool of %d and runs %d concurrent queries that each need ~5 ms of database CPU.\n\n", maxConns, *per, *per)
 	fmt.Println("| Path | Instances | Client connections wanted | Server connections used (peak) | Queries/s | p50 | p99 | Errors |")
 	fmt.Println("|---|---:|---:|---:|---:|---:|---:|---|")
 	for _, path := range []struct{ name, url string }{{"direct to PostgreSQL", *direct}, {"through PgBouncer (transaction mode, pool 20)", *bouncer}} {
-		for _, s := range strings.Split(*instances, ",") {
-			n, _ := strconv.Atoi(s)
+		for _, n := range counts {
 			if err := run(ctx, admin, path.name, path.url, n, *per, *d); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
