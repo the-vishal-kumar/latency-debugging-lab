@@ -2,3 +2,6 @@
 *.test
 scaling/bin/
 scaling/raw/
+
+# macOS
+.DS_Store
