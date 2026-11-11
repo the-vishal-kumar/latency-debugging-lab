@@ -1,5 +1,6 @@
 # Postgres for the demo, Jaeger to look at the traces, and a Go container so
-# nothing needs installing. Ports bind to localhost only.
+# nothing needs installing. Ports bind to localhost only; override them with
+# PG_PORT and JAEGER_UI_PORT if something else already uses them.
 name: latency-debugging-lab
 
 services:
@@ -9,26 +10,31 @@ services:
       POSTGRES_USER: lab
       POSTGRES_PASSWORD: lab   # local demo only
       POSTGRES_DB: lab
-    ports: ["127.0.0.1:55433:5432"]
+    ports: ["127.0.0.1:${PG_PORT:-55433}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lab -d lab"]
       interval: 2s
       timeout: 3s
       retries: 30
 
-  # Traces UI: http://localhost:16686
+  # Traces UI: http://localhost:16686. Receives OTLP over HTTP on 4318 from
+  # the other containers; that port isn't published to the host.
   jaeger:
     image: jaegertracing/jaeger:2.23.0
-    ports: ["127.0.0.1:16686:16686"]
+    ports: ["127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"]
 
+  # Runs as root so it can write the named cache volumes; it writes nothing
+  # into the bind-mounted source tree (run.sh builds into the gobin volume).
   go:
-    image: golang:1.27.3-bookworm
+    image: golang:1.27.4-bookworm
     profiles: ["tools"]
     working_dir: /src
-    volumes: [".:/src", "gocache:/root/.cache/go-build", "gomod:/go/pkg/mod"]
+    volumes: [".:/src", "gocache:/root/.cache/go-build", "gomod:/go/pkg/mod", "gobin:/go/bin"]
     environment:
       DATABASE_URL: postgres://lab:lab@postgres:5432/lab?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=local
+      GOFLAGS: -buildvcs=false
     depends_on:
       postgres: { condition: service_healthy }
       jaeger: { condition: service_started }
@@ -52,7 +58,8 @@ services:
     image: nginx:1.29.8-alpine
     profiles: ["scaling"]
     volumes: ["./scaling/nginx-${NGINX_MODE:-plain}.conf:/etc/nginx/nginx.conf:ro"]
-    depends_on: [app]
+    depends_on:
+      app: { condition: service_healthy }
 
   redis:
     image: redis:7.4-alpine
@@ -71,3 +78,4 @@ services:
 volumes:
   gocache:
   gomod:
+  gobin:
