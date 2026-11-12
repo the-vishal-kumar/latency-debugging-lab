@@ -62,7 +62,7 @@ services:
       app: { condition: service_healthy }
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.0-alpine
     profiles: ["scaling"]
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
