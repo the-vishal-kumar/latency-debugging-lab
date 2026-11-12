@@ -1,9 +1,11 @@
 # latency-debugging-lab
 
+[![CI](https://github.com/the-vishal-kumar/latency-debugging-lab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/the-vishal-kumar/latency-debugging-lab/actions/workflows/ci.yml)
+
 Find the bottleneck, then scale it. Two halves:
 
-1. **Debugging** (`make demo`): a small multi-tenant API, made slow in five common ways. For each one, the demo drives load before and after the fix and summarises what the traces show, so you can learn each cause's **signature**: the shape it leaves in a trace before you know what it is. Companion to the post *"A user says a page is lagging: how do you debug it end to end?"*
-2. **Scaling** (`make scaling`): what each scaling technique buys, measured. More replicas vs a bigger instance, four places to cache, a connection pooler vs a bigger database, and per-client rate limits against a noisy client. Companion to the post *"How do you scale an API?"* Results: [scaling/results.md](scaling/results.md).
+1. **Debugging** (`make demo`): a small multi-tenant API, made slow in five common ways. For each one, the demo drives load before and after the fix and summarises what the traces show, so you can learn each cause's **signature**: the shape it leaves in a trace before you know what it is.
+2. **Scaling** (`make scaling`): what each scaling technique buys, measured. More replicas vs a bigger instance, four places to cache, a connection pooler vs a bigger database, and per-client rate limits against a noisy client. Results: [scaling/results.md](scaling/results.md).
 
 ```bash
 make demo   # about a minute; prints results as Markdown
@@ -38,7 +40,7 @@ Measured results: [results.md](results.md).
 
 ## Fan-out and the tail
 
-`go run ./cmd/fanout` (no Docker needed) simulates one request that waits for 1 to 1,000 servers, each usually fast but slow 1% of the time, and compares waiting for all of them with hedged requests and partial results. It's a simulation with the latency model stated in [`internal/fanout`](internal/fanout/fanout.go), not a measurement; its test checks the simulated tail against 1 − 0.99^N. Companion to the post *"What happens when you type a search into Google and press Enter?"*
+`make fanout` (runs in Docker, no database needed; `go run ./cmd/fanout` also works if you have Go on the host) simulates one request that waits for 1 to 1,000 servers, each usually fast but slow 1% of the time, and compares waiting for all of them with hedged requests and partial results. It's a simulation with the latency model stated in [`internal/fanout`](internal/fanout/fanout.go), not a measurement; its test checks the simulated tail against 1 - 0.99^N.
 
 ## Layout
 
@@ -58,7 +60,7 @@ compose.yaml       PostgreSQL 17, Jaeger 2, a Go container; profile "scaling" ad
 
 - Everything runs on one machine, so a database round trip is a fraction of a millisecond. N+1 costs one round trip per row: on a network with a 1 ms round trip, the 51-query page in scenario 2 would spend about 50 ms more.
 - Instrumentation is hand-written (a pgx `QueryTracer` and `AcquireTracer`, a span around the HTTP call) to keep the dependency list short and the spans easy to read. In an application, the OpenTelemetry contrib instrumentation for your HTTP server, client and database driver does the same.
-- The load generator measures server-side time from the root span. What a user feels also includes the network, TLS, the browser's work and the frontend; the post covers those layers.
+- The load generator measures server-side time from the root span. What a user feels also includes the network, TLS, the browser's work and the frontend, none of which this lab measures.
 
 ## Licence
 

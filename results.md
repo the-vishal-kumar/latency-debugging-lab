@@ -1,8 +1,8 @@
 # Results
 
-Measured on 2026-11-10 with `make demo` on a laptop (Intel i7-8550U, 8 threads, 10 GB RAM): the app, PostgreSQL and the load generator all on one machine, so a database round trip is about 0.1–0.3 ms. Across a network, every number that depends on round trips (N+1 most of all) is larger.
+Measured on 2026-11-10 with `make demo` on a laptop (Intel i7-8550U, 8 threads, 10 GB RAM): the app, PostgreSQL and the load generator all on one machine, so a database round trip is about 0.1 to 0.3 ms. Across a network, every number that depends on round trips (N+1 most of all) is larger.
 
-A second run gave the same picture within about 25%: big-tenant p50 829 vs 1035 ms, N+1 p50 11 vs 16 ms, starved-pool p50 291 vs 303 ms, no-timeout p99 2002 ms both times, lock-wait p99 558 vs 529 ms. The run below is the second one.
+A second run gave the same picture, though the spread was not uniform (the two runs differ by about 5% for the starved pool and the lock wait, about 25% for the big tenant, and 45% (5 ms) for N+1, whose absolute times are small): big-tenant p50 829 vs 1035 ms, N+1 p50 11 vs 16 ms, starved-pool p50 291 vs 303 ms, no-timeout p99 2002 ms both times, lock-wait p99 558 vs 529 ms. The run below is the second one.
 
 PostgreSQL 17.11. Small tenant: 2000 orders; big tenant: 1000000 orders; 1,000 customers each. 3s of load per variant.
 

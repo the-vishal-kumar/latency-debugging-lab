@@ -20,7 +20,7 @@ Measured on 2026-11-10 with `scaling/run.sh` on one laptop (Intel i7-8550U, 4 co
 | none | 100 | 43 ms | 66 ms | 200 req/s: p99 4242 ms, 0 errors |
 | in-process map in each replica | 800 | 0.5 ms | 78 ms | 1600 req/s: p99 4861 ms, 2660 errors |
 | Redis | 800 | 0.8 ms | 69 ms | 1600 req/s: p99 4919 ms, 3363 errors |
-| nginx micro-cache in front (app does no caching) | 6400 | 0.3 ms | 1.3 ms | — |
+| nginx micro-cache in front (app does no caching) | 6400 | 0.3 ms | 1.3 ms | - |
 
 ## 3. "Too many connections": a bigger database, or a pooler?
 
