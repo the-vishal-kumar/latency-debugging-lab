@@ -178,11 +178,11 @@ func main() {
 		time.Sleep(2 * time.Second) // let queues drain between steps
 	}
 	if best < 0 {
-		fmt.Printf("| %s | below %.0f | — | — | — |\n", *label, steps[0].rate)
+		fmt.Printf("| %s | below %.0f | - | - | - |\n", *label, steps[0].rate)
 		return
 	}
 	b := steps[best]
-	next := "—"
+	next := "-"
 	if best+1 < len(steps) {
 		n := steps[best+1]
 		next = fmt.Sprintf("%.0f req/s: p99 %s, %d errors", n.rate, ms(n.r.p(0.99)), n.r.errs)

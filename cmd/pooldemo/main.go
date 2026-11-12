@@ -144,7 +144,7 @@ func run(ctx context.Context, admin *pgxpool.Pool, name, url string, instances, 
 	slices.Sort(lat)
 	p := func(q float64) string {
 		if len(lat) == 0 {
-			return "—"
+			return "-"
 		}
 		return fmt.Sprintf("%.1f ms", float64(lat[int(float64(len(lat))*q)].Microseconds())/1000)
 	}

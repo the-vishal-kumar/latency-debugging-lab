@@ -16,7 +16,7 @@ func main() {
 	const reqs = 20000
 	fmt.Printf("Simulated, not measured. Leaf model: ~%.0f ms usually (lognormal); %.0f%% of calls take ~%.0f ms. %d requests per row, fixed seed.\n\n",
 		m.FastMs, m.SlowProb*100, m.SlowMs, reqs)
-	fmt.Println("### Waiting for every leaf\n\n| Leaves | p50 | p99 | Requests slower than 10 ms | Expected: 1 − 0.99^N |\n|---:|---:|---:|---:|---:|")
+	fmt.Println("### Waiting for every leaf\n\n| Leaves | p50 | p99 | Requests slower than 10 ms | Expected: 1 - 0.99^N |\n|---:|---:|---:|---:|---:|")
 	for _, n := range []int{1, 10, 100, 1000} {
 		r := fanout.Run(m, fanout.WaitAll, n, reqs, 0, 0, 1)
 		fmt.Printf("| %d | %.1f ms | %.1f ms | %.1f%% | %.1f%% |\n", n, r.P50, r.P99, r.SlowFraction*100, m.Expected(n)*100)
