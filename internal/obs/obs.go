@@ -127,7 +127,9 @@ func Setup(ctx context.Context, service string) (*Collector, func(), error) {
 	return col, stop, nil
 }
 
-func tracer() trace.Tracer { return otel.Tracer("github.com/the-vishal-kumar/latency-debugging-lab/internal/obs") }
+func tracer() trace.Tracer {
+	return otel.Tracer("github.com/the-vishal-kumar/latency-debugging-lab/internal/obs")
+}
 
 // ---- per-request timing, for the Server-Timing header -----------------------
 
