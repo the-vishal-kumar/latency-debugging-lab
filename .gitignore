@@ -1,7 +1,7 @@
 .env
 *.test
-scaling/bin/
 scaling/raw/
+scaling/bin/
 
 # macOS
 .DS_Store

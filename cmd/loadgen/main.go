@@ -106,9 +106,22 @@ func main() {
 	slo := flag.Duration("slo", 100*time.Millisecond, "p99 a rate must stay under to count as sustained")
 	query := flag.String("query", "", "if set, appended as ?<query>=<random 1..10>")
 	flag.Parse()
+	var rateList []float64
+	for _, s := range strings.Split(*rates, ",") {
+		rate, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+		if err != nil || rate <= 0 {
+			fmt.Fprintf(os.Stderr, "loadgen: -rates: %q is not a positive number\n", s)
+			os.Exit(2)
+		}
+		rateList = append(rateList, rate)
+	}
+	if *clients < 1 || *d <= 0 || *noisy < 0 {
+		fmt.Fprintln(os.Stderr, "loadgen: -clients must be at least 1, -duration positive, -noisy-rate not negative")
+		os.Exit(2)
+	}
 	ctx := context.Background()
 	// One warm-up second at the first rate.
-	first, _ := strconv.ParseFloat(strings.Split(*rates, ",")[0], 64)
+	first := rateList[0]
 	fireURL := func(rate float64, dur time.Duration, id func() string) *result {
 		if *query == "" {
 			return fire(ctx, *url, rate, dur, id)
@@ -152,12 +165,7 @@ func main() {
 	}
 	var steps []step
 	best := -1
-	for _, s := range strings.Split(*rates, ",") {
-		rate, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
-		}
+	for _, rate := range rateList {
 		r := fireURL(rate, *d, normalID)
 		steps = append(steps, step{rate, r})
 		achieved := float64(r.ok) / d.Seconds()

@@ -7,9 +7,34 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.8.2
+  GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - name: staticcheck
+        run: go run "$STATICCHECK" ./...
+      - name: govulncheck
+        run: go run "$GOVULNCHECK" ./...
+
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17-alpine
@@ -24,14 +49,40 @@ jobs:
     env:
       DATABASE_URL: postgres://lab:lab@localhost:5432/lab?sslmode=disable
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Format
-        run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - name: Tests (pin each regression's trace signature)
-        run: go test -race -count=1 ./...
+      - name: Tests (-race; pins each regression's trace signature)
+        run: go test -race -count=1 -coverprofile=cover.out ./...
+      - name: Coverage
+        run: go tool cover -func=cover.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
       - name: Demo (smaller big tenant, shorter load)
         run: go run ./cmd/slowdemo -big 200000 -duration 1s >> "$GITHUB_STEP_SUMMARY"
+      - name: Fan-out simulation
+        run: go run ./cmd/fanout >> "$GITHUB_STEP_SUMMARY"
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build shopd image
+        run: docker build -t shopd:ci .
+      - name: Scan for HIGH/CRITICAL vulnerabilities
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0
+          image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed shopd:ci
+      - name: Smoke test (starts, reports healthy, rejects bad input)
+        run: |
+          docker network create smoke
+          docker run -d --name pg --network smoke -e POSTGRES_PASSWORD=lab postgres:17-alpine
+          docker run -d --name shopd --network smoke -p 127.0.0.1:8080:8080 \
+            -e DATABASE_URL=postgres://postgres:lab@pg:5432/postgres?sslmode=disable shopd:ci
+          for _ in $(seq 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' shopd)" = healthy ] && break; sleep 1
+          done
+          docker inspect -f '{{.State.Health.Status}}' shopd | grep -qx healthy
+          curl -fsS localhost:8080/cpu
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:8080/stats?tenant=x')" = 400
+          docker inspect -f '{{.Config.User}}' shopd | grep -qx 65534:65534

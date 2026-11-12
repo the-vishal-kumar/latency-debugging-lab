@@ -135,11 +135,15 @@ func (a *App) recommendations(ctx context.Context) []string {
 		if err != nil {
 			return err
 		}
+		obs.Inject(ctx, req)
 		resp, err := http.DefaultClient.Do(req) // http.DefaultClient has no timeout of its own
 		if err != nil {
 			return err
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("recommendations: status %d", resp.StatusCode)
+		}
 		return json.NewDecoder(resp.Body).Decode(&recs)
 	})
 	return recs
@@ -152,8 +156,11 @@ func (a *App) report(ctx context.Context, _ *http.Request) ([]byte, error) {
 }
 
 func (a *App) touch(ctx context.Context, r *http.Request) ([]byte, error) {
-	id, _ := strconv.Atoi(r.URL.Query().Get("customer"))
-	_, err := a.DB.Exec(ctx, `UPDATE shop.customers SET last_seen = now() WHERE id = $1`, id)
+	id, err := strconv.Atoi(r.URL.Query().Get("customer"))
+	if err != nil || id < 1 {
+		return nil, obs.BadRequest("customer must be a positive integer")
+	}
+	_, err = a.DB.Exec(ctx, `UPDATE shop.customers SET last_seen = now() WHERE id = $1`, id)
 	return []byte(`{}`), err
 }
 
@@ -207,6 +214,16 @@ type Stat struct {
 	SlowestDBQueryP99 time.Duration // p99 of single-query durations
 }
 
+// spanRoute is the server span's http.route attribute.
+func spanRoute(s sdktrace.ReadOnlySpan) string {
+	for _, kv := range s.Attributes() {
+		if kv.Key == "http.route" {
+			return kv.Value.AsString()
+		}
+	}
+	return s.Name()
+}
+
 func summarise(spans []sdktrace.ReadOnlySpan) []Stat {
 	type acc struct {
 		root          time.Duration
@@ -226,7 +243,7 @@ func summarise(spans []sdktrace.ReadOnlySpan) []Stat {
 		a, d := get(s.SpanContext().TraceID()), s.EndTime().Sub(s.StartTime())
 		switch name := s.Name(); {
 		case s.SpanKind() == trace.SpanKindServer:
-			a.root, a.route = d, strings.TrimPrefix(name, "GET ")
+			a.root, a.route = d, spanRoute(s)
 		case name == "db.query":
 			a.queries++
 			a.db += d

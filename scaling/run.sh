@@ -6,10 +6,14 @@ cd "$(dirname "$0")/.."
 mkdir -p scaling/raw
 OUT=scaling/results.md
 DC="docker compose --profile scaling"
-lg() { docker compose run --rm -T go scaling/bin/loadgen "$@" 2>>scaling/raw/loadgen.log; }
+LOG=scaling/raw/compose.log
+lg() { docker compose run --rm -T go loadgen "$@" 2>>scaling/raw/loadgen.log; }
+# Compose output goes to a log; on failure, show its tail instead of exiting silently.
+quiet() { "$@" >>"$LOG" 2>&1 || { echo "failed: $*" >&2; tail -20 "$LOG" >&2; exit 1; }; }
+: > "$LOG"
 
 echo "== starting PostgreSQL and seeding 1,000,000 orders over 10 tenants"
-docker compose up -d --wait postgres >/dev/null
+quiet docker compose up -d --wait postgres
 docker compose exec -T postgres psql -q -U lab -d lab >/dev/null <<'SQL'
 DROP SCHEMA IF EXISTS scale CASCADE;
 CREATE SCHEMA scale;
@@ -18,13 +22,14 @@ INSERT INTO scale.orders (tenant_id, total) SELECT 1 + (g % 10), round((random()
 CREATE INDEX ON scale.orders (tenant_id);
 VACUUM ANALYZE scale.orders;
 SQL
-docker compose run --rm -T go go build -buildvcs=false -o scaling/bin/ ./cmd/loadgen ./cmd/pooldemo
+# Build into the gobin volume (on PATH in the go container), not the source tree.
+quiet docker compose run --rm -T go go build -o /go/bin/ ./cmd/loadgen ./cmd/pooldemo
 : > scaling/raw/loadgen.log
 
 # start N replicas with the given settings, and an nginx that knows all of them
 deploy() { # replicas, then env assignments
   local n=$1; shift
-  env "$@" $DC up -d --build --wait --force-recreate --scale app="$n" app nginx redis >/dev/null 2>&1
+  quiet env "$@" $DC up -d --build --wait --force-recreate --scale app="$n" app nginx redis
   sleep 2
 }
 
@@ -65,12 +70,13 @@ deploy 1 APP_CPUS=1 CACHE=redis; lg -url http://nginx/stats -query tenant -rates
 deploy 1 APP_CPUS=1 CACHE=none NGINX_MODE=cache; lg -url http://nginx/stats -query tenant -rates $R -label "nginx micro-cache in front (app does no caching)" >> "$OUT"
 
 echo "== 3. too many connections"
-$DC up -d --wait pgbouncer >/dev/null 2>&1 || $DC up -d pgbouncer >/dev/null; sleep 3
+# The PgBouncer image has no healthcheck, so --wait returns once it starts.
+quiet $DC up -d --wait pgbouncer; sleep 3
 {
   echo
   echo "## 3. \"Too many connections\": a bigger database, or a pooler?"
   echo
-  docker compose run --rm -T go scaling/bin/pooldemo \
+  docker compose run --rm -T go pooldemo \
     -direct "postgres://lab:lab@postgres:5432/lab?sslmode=disable" \
     -bouncer "postgres://lab:lab@pgbouncer:6432/lab?sslmode=disable" -instances 4,6
 } >> "$OUT"
@@ -86,5 +92,5 @@ echo "== 4. one noisy client"
 deploy 1 APP_CPUS=1 RATE_LIMIT=0;  lg -url http://nginx/cpu -rates 300 -noisy-rate 1500 -label "none" >> "$OUT"
 deploy 1 APP_CPUS=1 RATE_LIMIT=50; lg -url http://nginx/cpu -rates 300 -noisy-rate 1500 -label "50 req/s per client (token bucket in the app)" >> "$OUT"
 
-$DC stop app nginx redis pgbouncer >/dev/null 2>&1
+quiet $DC stop app nginx redis pgbouncer
 echo "== done: $OUT"
