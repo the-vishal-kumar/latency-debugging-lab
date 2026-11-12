@@ -55,7 +55,7 @@ services:
       postgres: { condition: service_healthy }
 
   nginx:
-    image: nginx:1.29.8-alpine
+    image: nginx:1.31.8-alpine
     profiles: ["scaling"]
     volumes: ["./scaling/nginx-${NGINX_MODE:-plain}.conf:/etc/nginx/nginx.conf:ro"]
     depends_on:
