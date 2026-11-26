@@ -5,7 +5,7 @@ name: latency-debugging-lab
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:19-alpine
     environment:
       POSTGRES_USER: lab
       POSTGRES_PASSWORD: lab   # local demo only
